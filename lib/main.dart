@@ -93,12 +93,18 @@ class _GameListScreenState extends State<GameListScreen> {
     await _localFile.writeAsString(encodedData);
   }
 
-  // Mazání hry
   void _deleteGame(int index) {
     setState(() {
       _games.removeAt(index);
     });
     _saveGames();
+  }
+
+  // Změna barev při rating
+  Color _getRatingColor(double rating) {
+    if (rating >= 8) return Colors.green.shade600;
+    if (rating >= 5) return Colors.orange.shade600;
+    return Colors.red.shade600;
   }
 
   Future<void> _navigateToForm({Game? game, int? index}) async {
@@ -139,14 +145,20 @@ class _GameListScreenState extends State<GameListScreen> {
                   ),
                   child: ListTile(
                     leading: CircleAvatar(
-                      child: Text(game.rating.toStringAsFixed(0)),
+                      backgroundColor: _getRatingColor(game.rating),
+                      child: Text(
+                        game.rating.toStringAsFixed(0),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     title: Text(
                       game.title,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text('${game.developer}\n${game.notes}'),
-                    // Úpravu a smazání
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -175,7 +187,6 @@ class _GameListScreenState extends State<GameListScreen> {
     );
   }
 
-  // Potvrzení smazání
   void _confirmDelete(int index, String title) {
     showDialog(
       context: context,
@@ -247,11 +258,24 @@ class _GameFormScreenState extends State<GameFormScreen> {
               decoration: const InputDecoration(labelText: 'Poznámky'),
             ),
             const SizedBox(height: 20),
-            Text('Hodnocení: ${_rating.toInt()}/10'),
+            Text(
+              'Hodnocení: ${_rating.toInt()}/10',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: _rating >= 8
+                    ? Colors.green.shade700
+                    : (_rating >= 5
+                          ? Colors.orange.shade700
+                          : Colors.red.shade700),
+              ),
+            ),
             Slider(
               value: _rating,
               min: 0,
               max: 10,
+              activeColor: _rating >= 8
+                  ? Colors.green
+                  : (_rating >= 5 ? Colors.orange : Colors.red),
               divisions: 10,
               onChanged: (v) => setState(() => _rating = v),
             ),
