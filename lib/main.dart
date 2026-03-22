@@ -30,12 +30,16 @@ class Game {
   String developer;
   double rating;
   String notes;
+  String status;
+  DateTime dateAdded;
 
   Game({
     required this.title,
     required this.developer,
     required this.rating,
     required this.notes,
+    required this.status,
+    required this.dateAdded,
   });
 
   Map<String, dynamic> toJson() => {
@@ -43,6 +47,8 @@ class Game {
     'developer': developer,
     'rating': rating,
     'notes': notes,
+    'status': status,
+    'dateAdded': dateAdded.toIso8601String(),
   };
 
   factory Game.fromJson(Map<String, dynamic> json) => Game(
@@ -50,10 +56,21 @@ class Game {
     developer: json['developer'],
     rating: json['rating'].toDouble(),
     notes: json['notes'],
+    status: json['status'] ?? 'Chystám se',
+    dateAdded: DateTime.parse(
+      json['dateAdded'] ?? DateTime.now().toIso8601String(),
+    ),
   );
 }
 
-// Hlavní obrazovka
+Color getRatingColor(double rating) {
+  if (rating >= 9) return Colors.green.shade900;
+  if (rating >= 7) return Colors.green.shade500;
+  if (rating >= 5) return Colors.orange.shade500;
+  if (rating >= 3) return Colors.deepOrange.shade400;
+  return Colors.red.shade700;
+}
+
 class GameListScreen extends StatefulWidget {
   const GameListScreen({super.key});
 
@@ -62,7 +79,10 @@ class GameListScreen extends StatefulWidget {
 }
 
 class _GameListScreenState extends State<GameListScreen> {
-  List<Game> _games = [];
+  List<Game> _allGames = [];
+  List<Game> _filteredGames = [];
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -78,7 +98,8 @@ class _GameListScreenState extends State<GameListScreen> {
         final content = await _localFile.readAsString();
         final List<dynamic> jsonData = json.decode(content);
         setState(() {
-          _games = jsonData.map((item) => Game.fromJson(item)).toList();
+          _allGames = jsonData.map((item) => Game.fromJson(item)).toList();
+          _filteredGames = _allGames;
         });
       }
     } catch (e) {
@@ -88,56 +109,94 @@ class _GameListScreenState extends State<GameListScreen> {
 
   Future<void> _saveGames() async {
     final String encodedData = json.encode(
-      _games.map((g) => g.toJson()).toList(),
+      _allGames.map((g) => g.toJson()).toList(),
     );
     await _localFile.writeAsString(encodedData);
   }
 
-  void _deleteGame(int index) {
+  void _filterGames(String query) {
     setState(() {
-      _games.removeAt(index);
+      _filteredGames = _allGames
+          .where(
+            (game) => game.title.toLowerCase().contains(query.toLowerCase()),
+          )
+          .toList();
+    });
+  }
+
+  void _sortGames(String criteria) {
+    setState(() {
+      if (criteria == 'rating') {
+        _allGames.sort((a, b) => b.rating.compareTo(a.rating));
+      } else if (criteria == 'title') {
+        _allGames.sort(
+          (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+        );
+      } else if (criteria == 'date') {
+        _allGames.sort(
+          (a, b) => b.dateAdded.compareTo(a.dateAdded),
+        );
+      }
+      _filteredGames = List.from(_allGames);
     });
     _saveGames();
-  }
-
-  // Změna barev při rating
-  Color _getRatingColor(double rating) {
-    if (rating >= 8) return Colors.green.shade600;
-    if (rating >= 5) return Colors.orange.shade600;
-    return Colors.red.shade600;
-  }
-
-  Future<void> _navigateToForm({Game? game, int? index}) async {
-    final result = await Navigator.push<Game>(
-      context,
-      MaterialPageRoute(builder: (context) => GameFormScreen(game: game)),
-    );
-
-    if (result != null) {
-      setState(() {
-        if (index != null) {
-          _games[index] = result;
-        } else {
-          _games.add(result);
-        }
-      });
-      _saveGames();
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Moje Herní Knihovna'),
+        title: _isSearching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Hledat hru...',
+                  border: InputBorder.none,
+                ),
+                onChanged: _filterGames,
+              )
+            : const Text('Moje Herní Knihovna'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: Icon(_isSearching ? Icons.close : Icons.search),
+            onPressed: () {
+              setState(() {
+                _isSearching = !_isSearching;
+                if (!_isSearching) {
+                  _searchController.clear();
+                  _filteredGames = _allGames;
+                }
+              });
+            },
+          ),
+          PopupMenuButton<String>(
+            onSelected: _sortGames,
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'rating',
+                child: Text('Seřadit podle hodnocení'),
+              ),
+              const PopupMenuItem(
+                value: 'title',
+                child: Text('Seřadit abecedně'),
+              ),
+              const PopupMenuItem(
+                value: 'date',
+                child: Text('Seřadit podle data přidání'),
+              ),
+            ],
+            icon: const Icon(Icons.sort),
+          ),
+        ],
       ),
-      body: _games.isEmpty
-          ? const Center(child: Text('Zatím tu žádné hry nejsou.'))
+      body: _filteredGames.isEmpty
+          ? const Center(child: Text('Žádné hry nenalezeny.'))
           : ListView.builder(
-              itemCount: _games.length,
+              itemCount: _filteredGames.length,
               itemBuilder: (context, index) {
-                final game = _games[index];
+                final game = _filteredGames[index];
                 return Card(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -145,7 +204,7 @@ class _GameListScreenState extends State<GameListScreen> {
                   ),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: _getRatingColor(game.rating),
+                      backgroundColor: getRatingColor(game.rating),
                       child: Text(
                         game.rating.toStringAsFixed(0),
                         style: const TextStyle(
@@ -158,21 +217,34 @@ class _GameListScreenState extends State<GameListScreen> {
                       game.title,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    subtitle: Text('${game.developer}\n${game.notes}'),
+                    subtitle: Text(
+                      '${game.developer} • ${game.status}\n${game.notes}',
+                    ),
+                    isThreeLine: true,
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blueGrey),
-                          onPressed: () =>
-                              _navigateToForm(game: game, index: index),
+                          icon: const Icon(
+                            Icons.edit,
+                            color: Colors.blueGrey,
+                            size: 20,
+                          ),
+                          onPressed: () => _navigateToForm(
+                            game: game,
+                            index: _allGames.indexOf(game),
+                          ),
                         ),
                         IconButton(
                           icon: const Icon(
                             Icons.delete,
                             color: Colors.redAccent,
+                            size: 20,
                           ),
-                          onPressed: () => _confirmDelete(index, game.title),
+                          onPressed: () => _confirmDelete(
+                            _allGames.indexOf(game),
+                            game.title,
+                          ),
                         ),
                       ],
                     ),
@@ -185,6 +257,25 @@ class _GameListScreenState extends State<GameListScreen> {
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  Future<void> _navigateToForm({Game? game, int? index}) async {
+    final result = await Navigator.push<Game>(
+      context,
+      MaterialPageRoute(builder: (context) => GameFormScreen(game: game)),
+    );
+
+    if (result != null) {
+      setState(() {
+        if (index != null) {
+          _allGames[index] = result;
+        } else {
+          _allGames.add(result);
+        }
+        _filteredGames = _allGames;
+      });
+      _saveGames();
+    }
   }
 
   void _confirmDelete(int index, String title) {
@@ -200,7 +291,11 @@ class _GameListScreenState extends State<GameListScreen> {
           ),
           TextButton(
             onPressed: () {
-              _deleteGame(index);
+              setState(() {
+                _allGames.removeAt(index);
+                _filteredGames = _allGames;
+              });
+              _saveGames();
               Navigator.pop(context);
             },
             child: const Text('Smazat', style: TextStyle(color: Colors.red)),
@@ -211,9 +306,9 @@ class _GameListScreenState extends State<GameListScreen> {
   }
 }
 
-// Formulář
 class GameFormScreen extends StatefulWidget {
   final Game? game;
+
   const GameFormScreen({super.key, this.game});
 
   @override
@@ -225,6 +320,13 @@ class _GameFormScreenState extends State<GameFormScreen> {
   late TextEditingController _devController;
   late TextEditingController _notesController;
   late double _rating;
+  late String _status;
+  final List<String> _statusOptions = [
+    'Chystám se',
+    'Hraju',
+    'Dohráno',
+    'Odloženo',
+  ];
 
   @override
   void initState() {
@@ -233,53 +335,60 @@ class _GameFormScreenState extends State<GameFormScreen> {
     _devController = TextEditingController(text: widget.game?.developer ?? '');
     _notesController = TextEditingController(text: widget.game?.notes ?? '');
     _rating = widget.game?.rating ?? 5.0;
+    _status = widget.game?.status ?? 'Chystám se';
   }
 
   @override
   Widget build(BuildContext context) {
+    final Color currentRatingColor = getRatingColor(_rating);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.game == null ? 'Nová hra' : 'Upravit hru'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
             TextField(
               controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Název'),
+              decoration: const InputDecoration(labelText: 'Název hry'),
             ),
             TextField(
               controller: _devController,
               decoration: const InputDecoration(labelText: 'Vývojář'),
             ),
+            const SizedBox(height: 15),
+            DropdownButtonFormField<String>(
+              initialValue: _status,
+              decoration: const InputDecoration(labelText: 'Stav hraní'),
+              items: _statusOptions
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                  .toList(),
+              onChanged: (val) => setState(() => _status = val!),
+            ),
             TextField(
               controller: _notesController,
               decoration: const InputDecoration(labelText: 'Poznámky'),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
             Text(
               'Hodnocení: ${_rating.toInt()}/10',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: _rating >= 8
-                    ? Colors.green.shade700
-                    : (_rating >= 5
-                          ? Colors.orange.shade700
-                          : Colors.red.shade700),
+                fontSize: 18,
+                color: currentRatingColor,
               ),
             ),
             Slider(
               value: _rating,
               min: 0,
               max: 10,
-              activeColor: _rating >= 8
-                  ? Colors.green
-                  : (_rating >= 5 ? Colors.orange : Colors.red),
+              activeColor: currentRatingColor,
               divisions: 10,
               onChanged: (v) => setState(() => _rating = v),
             ),
-            const Spacer(),
+            const SizedBox(height: 50),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(50),
@@ -293,11 +402,14 @@ class _GameFormScreenState extends State<GameFormScreen> {
                       developer: _devController.text,
                       rating: _rating,
                       notes: _notesController.text,
+                      status: _status,
+                      dateAdded:
+                          widget.game?.dateAdded ?? DateTime.now(),
                     ),
                   );
                 }
               },
-              child: const Text('Uložit'),
+              child: const Text('Uložit hru'),
             ),
           ],
         ),
