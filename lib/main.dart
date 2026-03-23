@@ -133,9 +133,7 @@ class _GameListScreenState extends State<GameListScreen> {
           (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
         );
       } else if (criteria == 'date') {
-        _allGames.sort(
-          (a, b) => b.dateAdded.compareTo(a.dateAdded),
-        );
+        _allGames.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
       }
       _filteredGames = List.from(_allGames);
     });
@@ -403,8 +401,7 @@ class _GameFormScreenState extends State<GameFormScreen> {
                       rating: _rating,
                       notes: _notesController.text,
                       status: _status,
-                      dateAdded:
-                          widget.game?.dateAdded ?? DateTime.now(),
+                      dateAdded: widget.game?.dateAdded ?? DateTime.now(),
                     ),
                   );
                 }
